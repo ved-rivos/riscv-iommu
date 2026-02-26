@@ -296,7 +296,7 @@ check_rsp_and_faults(
     }
 
     if ( cause == 0 ) return 0;
-    return check_faults(iommu, cause, req->pid_valid, req->process_id, req->priv_req,
+    return check_faults(iommu, cause, req->orig_pid_valid, req->process_id, req->priv_req,
                  req->device_id, req->tr.iova, EXP_TTYP, exp_iotval2);
 }
 uint64_t
