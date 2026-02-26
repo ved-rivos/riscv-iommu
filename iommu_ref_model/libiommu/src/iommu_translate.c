@@ -523,7 +523,7 @@ stop_and_report_fault:
     // with success response.
     if ( req->tr.at != ADDR_TYPE_PCIE_ATS_TRANSLATION_REQUEST ) {
         report_fault(iommu, cause, iotval, iotval2, TTYP, DTF,
-                     req->device_id, req->pid_valid, req->process_id, req->priv_req);
+                     req->device_id, req->orig_pid_valid, req->process_id, req->priv_req);
         // Translated and Untranslated requests get UR response
         goto return_unsupported_request;
     }
