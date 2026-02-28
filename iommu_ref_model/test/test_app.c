@@ -3538,12 +3538,14 @@ main(void) {
     read_memory_test(DC_addr, 64, (char *)&DC);
     gpa = 0x280000003000;
 
+    iommu.reg_file.capabilities.Sv57x4 = 0;
     // Cause a access violation
     access_viol_addr = (DC.msiptp.PPN * PAGESIZE) + 3 * 16;
     send_translation_request(&iommu, 0x042874, 0, 0x0000, 0,
              0, 0, 0, ADDR_TYPE_UNTRANSLATED, gpa, 4, WRITE, &req, &rsp);
     fail_if( ( check_rsp_and_faults(&iommu, &req, &rsp, UNSUPPORTED_REQUEST, 261, 0) < 0 ) );
     access_viol_addr = -1;
+    iommu.reg_file.capabilities.Sv57x4 = 1;
 
     data_corruption_addr = (DC.msiptp.PPN * PAGESIZE) + 3 * 16;
     send_translation_request(&iommu, 0x042874, 0, 0x0000, 0,
@@ -3695,7 +3697,7 @@ main(void) {
     START_TEST("MSI MFIF mode");
     DC_addr = add_device(&iommu, 0x121679, 0x1979, 1, 0, 0, 0, 0,
                          1, 1, 0, 0, 0,
-                         IOHGATP_Sv48x4, IOSATP_Bare, PDTP_Bare,
+                         IOHGATP_Sv39x4, IOSATP_Bare, PDTP_Bare,
                          MSIPTP_Flat, 1, 0x0000000FF, 0x280000000);
     read_memory_test(DC_addr, 64, (char *)&DC);
     msipte.mrif.V = 1;
@@ -3715,11 +3717,15 @@ main(void) {
     gpa = 0x280000023000;
 
     // Disable MRIF
+    iommu.reg_file.capabilities.Sv57x4 = 0;
+    iommu.reg_file.capabilities.Sv48x4 = 0;
     iommu.reg_file.capabilities.msi_mrif = 0;
     send_translation_request(&iommu, 0x121679, 0, 0x0000, 0,
              0, 0, 0, ADDR_TYPE_UNTRANSLATED, gpa, 4, WRITE, &req, &rsp);
     fail_if( ( check_rsp_and_faults(&iommu, &req, &rsp, UNSUPPORTED_REQUEST, 263, 0) < 0 ) );
     iommu.reg_file.capabilities.msi_mrif = 1;
+    iommu.reg_file.capabilities.Sv57x4 = 1;
+    iommu.reg_file.capabilities.Sv48x4 = 1;
 
     // misconfigured
     msipte.mrif.reserved1 = 1;
@@ -3976,6 +3982,47 @@ main(void) {
     END_TEST();
 
     START_TEST("Sv32 mode");
+
+    iommu.gxl_writeable = 1;
+    iommu.reg_file.fctl.gxl = 1;
+    iommu.reg_file.capabilities.Sv57x4 = 0;
+    iommu.reg_file.capabilities.Sv48x4 = 0;
+    iommu.reg_file.capabilities.Sv39x4 = 0;
+    DC_addr = add_device(&iommu, 0x900000, 1, 0, 0, 0, 0, 0,
+                         1, 1, 0, 0, 1,
+                         IOHGATP_Sv32x4, IOSATP_Bare, PD20,
+                         MSIPTP_Flat, 1, 0, -1);
+    read_memory_test(DC_addr, 64, (char *)&DC);
+    gpte.raw = 0;
+    gpte.V = 1;
+    gpte.R = 1;
+    gpte.W = 1;
+    gpte.X = 1;
+    gpte.U = 1;
+    gpte.G = 0;
+    gpte.A = 0;
+    gpte.D = 0;
+    gpte.PBMT = PMA;
+    pte.PPN = get_free_gppn(1, DC.iohgatp);
+    gpte.PPN = get_free_ppn(1);
+    gpa = pte.PPN * PAGESIZE;
+    spa = gpte.PPN * PAGESIZE;
+    gpte_addr = add_g_stage_pte(&iommu, DC.iohgatp, gpa, gpte, 0);
+    send_translation_request(&iommu, 0x900000, 0, 0xBABEC, 0,
+             0, 1, 0, ADDR_TYPE_UNTRANSLATED, gpa,
+             1, WRITE, &req, &rsp);
+    fail_if( ( check_rsp_and_faults(&iommu, &req, &rsp, SUCCESS, 0, 0) < 0 ) );
+    // Disable G-stage
+    iommu.reg_file.capabilities.Sv32x4 = 0;
+    send_translation_request(&iommu, 0x900000, 0, 0xBABEC, 0,
+             0, 1, 0, ADDR_TYPE_UNTRANSLATED, gpa,
+             1, WRITE, &req, &rsp);
+    fail_if( ( check_rsp_and_faults(&iommu, &req, &rsp, SUCCESS, 0, 0) < 0 ) );
+    iommu.reg_file.capabilities.Sv32x4 = 1;
+    iommu.reg_file.capabilities.Sv57x4 = 1;
+    iommu.reg_file.capabilities.Sv48x4 = 1;
+    iommu.reg_file.capabilities.Sv39x4 = 1;
+
     // Change IOMMU mode to base device context
     iommu.reg_file.capabilities.msi_flat = 0;
 
@@ -3987,6 +4034,7 @@ main(void) {
                          1, 1, 0, 0, 1,
                          IOHGATP_Sv32x4, IOSATP_Bare, PD20,
                          MSIPTP_Flat, 1, 0xFFFFFFFFFF, 0x1000000000);
+
     read_memory_test(DC_addr, 64, (char *)&DC);
 
     // Add process context
